@@ -133,6 +133,8 @@ EOF
   echo -e "${GREEN}[+]${RESET} Creating initial database schema"
   cd ${METASPLOIT_BASEDIR}/
   bundle exec rake db:migrate >/dev/null
+
+  echo "export MSF_DATABASE_CONFIG=${DB_CONF}" > /etc/profile.d/metasploit.sh
 }
 
 delete_db() {
