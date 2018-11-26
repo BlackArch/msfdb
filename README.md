@@ -4,7 +4,7 @@ Manage the metasploit framework database
 
 ## Installation
 
-`pacman -S blackarch-msfdb`
+`pacman -S msfdb`
 
 ## Usage
 
