@@ -53,6 +53,9 @@ check_pg() {
   if [ -e ${PG_CONF} ]; then
     return
   else
+    if [[ "$(stat -c "%U:%G" /var/lib/postgres/)" != "postgres:postgres" ]]; then
+      chown -R postgres:postgres /var/lib/postgres/
+    fi
     pg_cmd "initdb --locale en_US.UTF-8 -D '$PG_BASEDIR/data'" >/dev/null
   fi
 }
