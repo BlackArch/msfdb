@@ -180,12 +180,10 @@ reinit_db() {
 }
 
 status_db() {
-  systemctl --no-pager -l status ${PG_SERVICE}
-
   ## Check if the port is free
   if lsof -Pi :${DB_PORT} -sTCP:LISTEN -t >/dev/null ; then
     echo ""
-    ## Show network servies
+    ## Show network services
     lsof -Pi :${DB_PORT} -sTCP:LISTEN
     echo ""
     ## Show running processes
