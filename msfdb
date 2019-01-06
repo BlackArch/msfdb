@@ -13,17 +13,17 @@ PG_CONF=${PG_BASEDIR}/data/postgresql.conf
 
 ## Bash Colour output
 if tput setaf 0 &>/dev/null; then
-  RESET="$(tput sgr0)"
-  BOLD="$(tput bold)"
-  GREEN="${BOLD}$(tput setaf 2)"
-  RED="${BOLD}$(tput setaf 1)"
-  YELLOW="${BOLD}$(tput setaf 3)"
+    RESET="$(tput sgr0)"
+    BOLD="$(tput bold)"
+    GREEN="${BOLD}$(tput setaf 2)"
+    RED="${BOLD}$(tput setaf 1)"
+    YELLOW="${BOLD}$(tput setaf 3)"
 else
-  RESET="\e[0m"
-  BOLD="\e[1m"
-  GREEN="${BOLD}\e[32m"
-  RED="${BOLD}\e[31m"
-  YELLOW="${BOLD}\e[33m"
+    RESET="\e[0m"
+    BOLD="\e[1m"
+    GREEN="${BOLD}\e[32m"
+    RED="${BOLD}\e[31m"
+    YELLOW="${BOLD}\e[33m"
 fi
 readonly RESET BOLD GREEN RED YELLOW
 
@@ -31,107 +31,115 @@ readonly RESET BOLD GREEN RED YELLOW
 # print error and exit
 err()
 {
-  echo "${RED}[-]${RESET} ERROR: ${@}"
+    echo "${RED}[-]${RESET} ERROR: ${@}"
 }
 
 
 # print warning
 warn()
 {
-  echo "${YELLOW}[!]${RESET} WARNING: ${@}"
+    echo "${YELLOW}[!]${RESET} WARNING: ${@}"
 }
 
 # print message
 msg()
 {
-  echo "${GREEN}[+]${RESET} ${@}"
+    echo "${GREEN}[+]${RESET} ${@}"
 }
 
-pw_gen() {
-  openssl rand -base64 32
+pw_gen()
+{
+    openssl rand -base64 32
 }
 
-pg_cmd() {
-  su - postgres -c "$*"
+pg_cmd()
+{
+    su - postgres -c "$*"
 }
 
-db_exists() {
-  if pg_cmd "psql -lqt" | cut -d \| -f 1 | grep -qw $1; then
-    return 0
-  fi
-  return 1
-}
-
-user_exists() {
-  if echo "SELECT usename FROM pg_user;" | pg_cmd "psql -qt postgres" | grep -qw $1; then
-    return 0
-  fi
-  return 1
-}
-
-check_pg() {
-  if [ -e ${PG_CONF} ]; then
-    return
-  else
-    if [[ "$(stat -c "%U:%G" /var/lib/postgres/)" != "postgres:postgres" ]]; then
-      chown -R postgres:postgres /var/lib/postgres/
+db_exists()
+{
+    if pg_cmd "psql -lqt" | cut -d \| -f 1 | grep -qw $1; then
+        return 0
     fi
-    pg_cmd "initdb --locale en_US.UTF-8 -D '$PG_BASEDIR/data'" >/dev/null
-  fi
+    return 1
 }
 
-start_db() {
-  check_pg
-
-  if ! systemctl status ${PG_SERVICE} >/dev/null; then
-    msg "Starting database"
-    systemctl start ${PG_SERVICE}
-  else
-    warn "Database already started"
-  fi
+user_exists()
+{
+    if echo "SELECT usename FROM pg_user;" | pg_cmd "psql -qt postgres" | grep -qw $1; then
+        return 0
+    fi
+    return 1
 }
 
-stop_db() {
-  if systemctl status ${PG_SERVICE} >/dev/null; then
-    msg "Stopping database"
-    systemctl stop ${PG_SERVICE}
-  else
-    warn "Database already stopped"
-  fi
+check_pg()
+{
+    if [ -e ${PG_CONF} ]; then
+        return
+    else
+        if [[ "$(stat -c "%U:%G" /var/lib/postgres/)" != "postgres:postgres" ]]; then
+            chown -R postgres:postgres /var/lib/postgres/
+        fi
+        pg_cmd "initdb --locale en_US.UTF-8 -D '$PG_BASEDIR/data'" >/dev/null
+    fi
 }
 
-init_db() {
-  start_db
+start_db()
+{
+    check_pg
 
-  if [ -e ${DB_CONF} ]; then
-    warn "The database appears to be already configured, skipping initialization"
-    return
-  fi
+    if ! systemctl status ${PG_SERVICE} >/dev/null; then
+        msg "Starting database"
+        systemctl start ${PG_SERVICE}
+    else
+        warn "Database already started"
+    fi
+}
 
-  DB_PASS=$(pw_gen)
-  if user_exists ${DB_USER}; then
-    msg "Resetting password of database user '${DB_USER}'"
-    printf "ALTER ROLE ${DB_USER} WITH PASSWORD '$DB_PASS';\n" | pg_cmd psql postgres >/dev/null
-  else
-    msg "Creating database user '${DB_USER}'"
-    TMPFILE=$(mktemp) || (err "Couldn't create temp file" && exit 1)
-    printf "%s\n%s\n" "${DB_PASS}" "${DB_PASS}" | pg_cmd createuser -S -D -R -P ${DB_USER} >/dev/null 2>"${TMPFILE}"
-    grep -v "^Enter password for new role: $\|^Enter it again: $" "${TMPFILE}"
-    rm -f "${TMPFILE}"
-  fi
+stop_db()
+{
+    if systemctl status ${PG_SERVICE} >/dev/null; then
+        msg "Stopping database"
+        systemctl stop ${PG_SERVICE}
+    else
+        warn "Database already stopped"
+    fi
+}
 
-  if ! db_exists ${DB_NAME}; then
-    msg "Creating databases '${DB_NAME}'"
-    pg_cmd createdb ${DB_NAME} -O ${DB_USER} -T template0 -E UTF-8
-  fi
+init_db()
+{
+    start_db
 
-  if ! db_exists ${DB_NAME}_test; then
-    msg "Creating databases '${DB_NAME}_test'"
-    pg_cmd createdb ${DB_NAME}_test -O ${DB_USER} -T template0 -E UTF-8
-  fi
+    if [ -e ${DB_CONF} ]; then
+        warn "The database appears to be already configured, skipping initialization"
+        return
+    fi
 
-  msg "Creating configuration file '${DB_CONF}'"
-  cat > ${DB_CONF} <<-EOF
+    DB_PASS=$(pw_gen)
+    if user_exists ${DB_USER}; then
+        msg "Resetting password of database user '${DB_USER}'"
+        printf "ALTER ROLE ${DB_USER} WITH PASSWORD '$DB_PASS';\n" | pg_cmd psql postgres >/dev/null
+    else
+        msg "Creating database user '${DB_USER}'"
+        TMPFILE=$(mktemp) || (err "Couldn't create temp file" && exit 1)
+        printf "%s\n%s\n" "${DB_PASS}" "${DB_PASS}" | pg_cmd createuser -S -D -R -P ${DB_USER} >/dev/null 2>"${TMPFILE}"
+        grep -v "^Enter password for new role: $\|^Enter it again: $" "${TMPFILE}"
+        rm -f "${TMPFILE}"
+    fi
+
+    if ! db_exists ${DB_NAME}; then
+        msg "Creating databases '${DB_NAME}'"
+        pg_cmd createdb ${DB_NAME} -O ${DB_USER} -T template0 -E UTF-8
+    fi
+
+    if ! db_exists ${DB_NAME}_test; then
+        msg "Creating databases '${DB_NAME}_test'"
+        pg_cmd createdb ${DB_NAME}_test -O ${DB_USER} -T template0 -E UTF-8
+    fi
+
+    msg "Creating configuration file '${DB_CONF}'"
+    cat > ${DB_CONF} <<-EOF
 development:
   adapter: postgresql
   database: ${DB_NAME}
@@ -163,110 +171,115 @@ test:
   timeout: 5
 EOF
 
-  msg "Creating initial database schema"
-  cd ${METASPLOIT_BASEDIR}/
-  bundle exec rake db:migrate >/dev/null
+    msg "Creating initial database schema"
+    cd ${METASPLOIT_BASEDIR}/
+    bundle exec rake db:migrate >/dev/null
 
-  echo "export MSF_DATABASE_CONFIG=${DB_CONF}" > /etc/profile.d/metasploit.sh
+    echo "export MSF_DATABASE_CONFIG=${DB_CONF}" > /etc/profile.d/metasploit.sh
 }
 
-delete_db() {
-  start_db
-
-  if db_exists ${DB_NAME}; then
-    msg "Dropping databases '${DB_NAME}'"
-    pg_cmd dropdb ${DB_NAME}
-  fi
-
-  if db_exists ${DB_NAME}_test; then
-    msg "Dropping databases '${DB_NAME}_test'"
-    pg_cmd dropdb ${DB_NAME}_test
-  fi
-
-  if user_exists ${DB_USER}; then
-    msg "Dropping database user '${DB_USER}'"
-    pg_cmd dropuser ${DB_USER}
-  fi
-
-  msg "Deleting configuration file ${DB_CONF}"
-  rm -f ${DB_CONF}
-
-  stop_db
-}
-
-reinit_db() {
-  delete_db
-  init_db
-}
-
-status_db() {
-  ## Check if the port is free
-  if lsof -Pi :${DB_PORT} -sTCP:LISTEN -t >/dev/null ; then
-    echo ""
-    ## Show network services
-    lsof -Pi :${DB_PORT} -sTCP:LISTEN
-    echo ""
-    ## Show running processes
-    ps -f $( lsof -Pi :${DB_PORT} -sTCP:LISTEN -t )
-    echo ""
-  else
-    warn "No network service running"
-  fi
-
-  if [ -e ${DB_CONF} ]; then
-    msg "Detected configuration file (${DB_CONF})"
-  else
-    warn "No configuration file found"
-  fi
-}
-
-run_db() {
-  ## Is there a config file?
-  if [ ! -e ${DB_CONF} ]; then
-    ## No, so lets create one (first time run!)
-    init_db
-  else
-   ## There is, so just start up
+delete_db()
+{
     start_db
-  fi
 
-  ## Run metasploit-framework's main console
-  msfconsole
+    if db_exists ${DB_NAME}; then
+        msg "Dropping databases '${DB_NAME}'"
+        pg_cmd dropdb ${DB_NAME}
+    fi
+
+    if db_exists ${DB_NAME}_test; then
+        msg "Dropping databases '${DB_NAME}_test'"
+        pg_cmd dropdb ${DB_NAME}_test
+    fi
+
+    if user_exists ${DB_USER}; then
+        msg "Dropping database user '${DB_USER}'"
+        pg_cmd dropuser ${DB_USER}
+    fi
+
+    msg "Deleting configuration file ${DB_CONF}"
+    rm -f ${DB_CONF}
+
+    stop_db
 }
 
-usage() {
-  PROG="$(basename $0)"
-  echo
-  echo "Manage the metasploit framework database"
-  echo
-  echo "  ${PROG} init     # start and initialize the database"
-  echo "  ${PROG} reinit   # delete and reinitialize the database"
-  echo "  ${PROG} delete   # delete database and stop using it"
-  echo "  ${PROG} start    # start the database"
-  echo "  ${PROG} stop     # stop the database"
-  echo "  ${PROG} status   # check service status"
-  echo "  ${PROG} run      # start the database and run msfconsole"
-  echo
-  exit 0
+reinit_db()
+{
+    delete_db
+    init_db
+}
+
+status_db()
+{
+    ## Check if the port is free
+    if lsof -Pi :${DB_PORT} -sTCP:LISTEN -t >/dev/null ; then
+        echo ""
+        ## Show network services
+        lsof -Pi :${DB_PORT} -sTCP:LISTEN
+        echo ""
+        ## Show running processes
+        ps -f $( lsof -Pi :${DB_PORT} -sTCP:LISTEN -t )
+        echo ""
+    else
+        warn "No network service running"
+    fi
+
+    if [ -e ${DB_CONF} ]; then
+        msg "Detected configuration file (${DB_CONF})"
+    else
+        warn "No configuration file found"
+    fi
+}
+
+run_db()
+{
+    ## Is there a config file?
+    if [ ! -e ${DB_CONF} ]; then
+        ## No, so lets create one (first time run!)
+        init_db
+    else
+        ## There is, so just start up
+        start_db
+    fi
+
+    ## Run metasploit-framework's main console
+    msfconsole
+}
+
+usage()
+{
+    PROG="$(basename $0)"
+    echo
+    echo "Manage the metasploit framework database"
+    echo
+    echo "  ${PROG} init     # start and initialize the database"
+    echo "  ${PROG} reinit   # delete and reinitialize the database"
+    echo "  ${PROG} delete   # delete database and stop using it"
+    echo "  ${PROG} start    # start the database"
+    echo "  ${PROG} stop     # stop the database"
+    echo "  ${PROG} status   # check service status"
+    echo "  ${PROG} run      # start the database and run msfconsole"
+    echo
+    exit 0
 }
 
 if [ "$#" -ne 1 ]; then
-  usage
+    usage
 fi
 
 if [ $(id -u) -ne 0 ]; then
-  err "$0 must be ${RED}run as root${RESET}"
-  exit 1
+    err "$0 must be ${RED}run as root${RESET}"
+    exit 1
 fi
 
 case $1 in
-  init) init_db ;;
-  reinit) reinit_db ;;
-  delete) delete_db ;;
-  start) start_db ;;
-  stop) stop_db ;;
-  status) status_db ;;
-  run) run_db ;;
-  *) err "unrecognized action '${RED}${1}${RESET}'"; usage ;;
+    init) init_db ;;
+    reinit) reinit_db ;;
+    delete) delete_db ;;
+    start) start_db ;;
+    stop) stop_db ;;
+    status) status_db ;;
+    run) run_db ;;
+    *) err "unrecognized action '${RED}${1}${RESET}'"; usage ;;
 esac
 
