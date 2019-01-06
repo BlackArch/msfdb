@@ -1,0 +1,17 @@
+#_msfdb_options="init       - start and initialize the database.
+#reinit     - delete and reinitialize the database.
+#delete     - delete database and stop using it.
+#start      - start the database.
+#stop       - stop the database.
+#status     - check service status.
+#run        - start the database and run msfconsole."
+
+_msfdb()
+{
+    local current options
+    options="start stop status run delete init reinit"
+    current="${COMP_WORDS[COMP_CWORD]}"
+    COMPREPLY=($(compgen -W "${options}" -- ${current}))
+}
+
+complete -o nospace -F _msfdb msfdb

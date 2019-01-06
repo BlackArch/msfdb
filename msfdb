@@ -25,7 +25,27 @@ else
   RED="${BOLD}\e[31m"
   YELLOW="${BOLD}\e[33m"
 fi
-readonly ALL_OFF BOLD BLUE GREEN RED YELLOW
+readonly RESET BOLD GREEN RED YELLOW
+
+
+# print error and exit
+err()
+{
+  echo "${RED}[-]${RESET} ERROR: ${@}"
+}
+
+
+# print warning
+warn()
+{
+  echo "${YELLOW}[!]${RESET} WARNING: ${@}"
+}
+
+# print message
+msg()
+{
+  echo "${GREEN}[+]${RESET} ${@}"
+}
 
 pw_gen() {
   openssl rand -base64 32
@@ -64,19 +84,19 @@ start_db() {
   check_pg
 
   if ! systemctl status ${PG_SERVICE} >/dev/null; then
-    echo -e "${GREEN}[+]${RESET} Starting database"
+    msg "Starting database"
     systemctl start ${PG_SERVICE}
   else
-    echo -e "${YELLOW}[i]${RESET} Database already started"
+    warn "Database already started"
   fi
 }
 
 stop_db() {
   if systemctl status ${PG_SERVICE} >/dev/null; then
-    echo -e "${GREEN}[+]${RESET} Stopping database"
+    msg "Stopping database"
     systemctl stop ${PG_SERVICE}
   else
-    echo -e "${YELLOW}[i]${RESET} Database already stopped"
+    warn "Database already stopped"
   fi
 }
 
@@ -84,33 +104,33 @@ init_db() {
   start_db
 
   if [ -e ${DB_CONF} ]; then
-    echo -e "${YELLOW}[i]${RESET} The database appears to be already configured, skipping initialization"
+    warn "The database appears to be already configured, skipping initialization"
     return
   fi
 
   DB_PASS=$(pw_gen)
   if user_exists ${DB_USER}; then
-    echo -e "${GREEN}[+]${RESET} Resetting password of database user '${DB_USER}'"
+    msg "Resetting password of database user '${DB_USER}'"
     printf "ALTER ROLE ${DB_USER} WITH PASSWORD '$DB_PASS';\n" | pg_cmd psql postgres >/dev/null
   else
-    echo -e "${GREEN}[+]${RESET} Creating database user '${DB_USER}'"
-    TMPFILE=$(mktemp) || (echo -e "${RED}[-]${RESET} Error: Couldn't create temp file" && exit 1)
+    msg "Creating database user '${DB_USER}'"
+    TMPFILE=$(mktemp) || (err "Couldn't create temp file" && exit 1)
     printf "%s\n%s\n" "${DB_PASS}" "${DB_PASS}" | pg_cmd createuser -S -D -R -P ${DB_USER} >/dev/null 2>"${TMPFILE}"
     grep -v "^Enter password for new role: $\|^Enter it again: $" "${TMPFILE}"
     rm -f "${TMPFILE}"
   fi
 
   if ! db_exists ${DB_NAME}; then
-    echo -e "${GREEN}[+]${RESET} Creating databases '${DB_NAME}'"
+    msg "Creating databases '${DB_NAME}'"
     pg_cmd createdb ${DB_NAME} -O ${DB_USER} -T template0 -E UTF-8
   fi
 
   if ! db_exists ${DB_NAME}_test; then
-    echo -e "${GREEN}[+]${RESET} Creating databases '${DB_NAME}_test'"
+    msg "Creating databases '${DB_NAME}_test'"
     pg_cmd createdb ${DB_NAME}_test -O ${DB_USER} -T template0 -E UTF-8
   fi
 
-  echo -e "${GREEN}[+]${RESET} Creating configuration file '${DB_CONF}'"
+  msg "Creating configuration file '${DB_CONF}'"
   cat > ${DB_CONF} <<-EOF
 development:
   adapter: postgresql
@@ -143,7 +163,7 @@ test:
   timeout: 5
 EOF
 
-  echo -e "${GREEN}[+]${RESET} Creating initial database schema"
+  msg "Creating initial database schema"
   cd ${METASPLOIT_BASEDIR}/
   bundle exec rake db:migrate >/dev/null
 
@@ -154,21 +174,21 @@ delete_db() {
   start_db
 
   if db_exists ${DB_NAME}; then
-    echo -e "${GREEN}[+]${RESET} Dropping databases '${DB_NAME}'"
+    msg "Dropping databases '${DB_NAME}'"
     pg_cmd dropdb ${DB_NAME}
   fi
 
   if db_exists ${DB_NAME}_test; then
-    echo -e "${GREEN}[+]${RESET} Dropping databases '${DB_NAME}_test'"
+    msg "Dropping databases '${DB_NAME}_test'"
     pg_cmd dropdb ${DB_NAME}_test
   fi
 
   if user_exists ${DB_USER}; then
-    echo -e "${GREEN}[+]${RESET} Dropping database user '${DB_USER}'"
+    msg "Dropping database user '${DB_USER}'"
     pg_cmd dropuser ${DB_USER}
   fi
 
-  echo -e "${GREEN}[+]${RESET} Deleting configuration file ${DB_CONF}"
+  msg "Deleting configuration file ${DB_CONF}"
   rm -f ${DB_CONF}
 
   stop_db
@@ -190,13 +210,13 @@ status_db() {
     ps -f $( lsof -Pi :${DB_PORT} -sTCP:LISTEN -t )
     echo ""
   else
-    echo -e "${YELLOW}[i]${RESET} No network service running"
+    warn "No network service running"
   fi
 
   if [ -e ${DB_CONF} ]; then
-    echo -e "${GREEN}[+]${RESET} Detected configuration file (${DB_CONF})"
+    msg "Detected configuration file (${DB_CONF})"
   else
-    echo -e "${YELLOW}[i]${RESET} No configuration file found"
+    warn "No configuration file found"
   fi
 }
 
@@ -235,7 +255,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 if [ $(id -u) -ne 0 ]; then
-  echo -e "${RED}[-]${RESET} Error: $0 must be ${RED}run as root${RESET}" 1>&2
+  err "$0 must be ${RED}run as root${RESET}"
   exit 1
 fi
 
@@ -247,6 +267,6 @@ case $1 in
   stop) stop_db ;;
   status) status_db ;;
   run) run_db ;;
-  *) echo -e "${RED}[-]${RESET} Error: unrecognized action '${RED}${1}${RESET}'" 1>&2; usage ;;
+  *) err "unrecognized action '${RED}${1}${RESET}'"; usage ;;
 esac
 
