@@ -9,7 +9,7 @@ DB_USER=msf
 DB_PORT=5432
 PG_SERVICE=postgresql
 PG_CONF=${PG_BASEDIR}/data/postgresql.conf
-
+METASPLOIT_PROFILE=/etc/profile.d/metasploit.sh
 
 ## Bash Colour output
 if tput setaf 0 &>/dev/null; then
@@ -27,54 +27,44 @@ else
 fi
 readonly RESET BOLD GREEN RED YELLOW
 
-
 # print error and exit
-err()
-{
+err() {
     echo "${RED}[-]${RESET} ERROR: ${@}"
 }
 
-
 # print warning
-warn()
-{
+warn() {
     echo "${YELLOW}[!]${RESET} WARNING: ${@}"
 }
 
 # print message
-msg()
-{
+msg() {
     echo "${GREEN}[+]${RESET} ${@}"
 }
 
-pw_gen()
-{
+pw_gen() {
     openssl rand -base64 32
 }
 
-pg_cmd()
-{
+pg_cmd() {
     su - postgres -c "$*"
 }
 
-db_exists()
-{
+db_exists() {
     if pg_cmd "psql -lqt" | cut -d \| -f 1 | grep -qw $1; then
         return 0
     fi
     return 1
 }
 
-user_exists()
-{
+user_exists() {
     if echo "SELECT usename FROM pg_user;" | pg_cmd "psql -qt postgres" | grep -qw $1; then
         return 0
     fi
     return 1
 }
 
-check_pg()
-{
+check_pg() {
     if [ -e ${PG_CONF} ]; then
         return
     else
@@ -85,8 +75,7 @@ check_pg()
     fi
 }
 
-start_db()
-{
+start_db() {
     check_pg
 
     if ! systemctl status ${PG_SERVICE} >/dev/null; then
@@ -97,8 +86,7 @@ start_db()
     fi
 }
 
-stop_db()
-{
+stop_db() {
     if systemctl status ${PG_SERVICE} >/dev/null; then
         msg "Stopping database"
         systemctl stop ${PG_SERVICE}
@@ -107,8 +95,7 @@ stop_db()
     fi
 }
 
-init_db()
-{
+init_db() {
     start_db
 
     if [ -e ${DB_CONF} ]; then
@@ -139,7 +126,7 @@ init_db()
     fi
 
     msg "Creating configuration file '${DB_CONF}'"
-    cat > ${DB_CONF} <<-EOF
+    cat >${DB_CONF} <<-EOF
 development:
   adapter: postgresql
   database: ${DB_NAME}
@@ -170,16 +157,13 @@ test:
   pool: 5
   timeout: 5
 EOF
+    chmod 644 ${DB_CONF}
 
-    msg "Creating initial database schema"
-    cd ${METASPLOIT_BASEDIR}/
-    bundle exec rake db:migrate >/dev/null
-
-    echo "export MSF_DATABASE_CONFIG=${DB_CONF}" > /etc/profile.d/metasploit.sh
+    echo "export MSF_DATABASE_CONFIG=${DB_CONF}" >${METASPLOIT_PROFILE}
+    chmod 644 ${METASPLOIT_PROFILE}
 }
 
-delete_db()
-{
+delete_db() {
     start_db
 
     if db_exists ${DB_NAME}; then
@@ -198,27 +182,25 @@ delete_db()
     fi
 
     msg "Deleting configuration file ${DB_CONF}"
-    rm -f ${DB_CONF}
+    rm -f ${DB_CONF} ${METASPLOIT_PROFILE}
 
     stop_db
 }
 
-reinit_db()
-{
+reinit_db() {
     delete_db
     init_db
 }
 
-status_db()
-{
+status_db() {
     ## Check if the port is free
-    if lsof -Pi :${DB_PORT} -sTCP:LISTEN -t >/dev/null ; then
+    if lsof -Pi :${DB_PORT} -sTCP:LISTEN -t >/dev/null; then
         echo ""
         ## Show network services
         lsof -Pi :${DB_PORT} -sTCP:LISTEN
         echo ""
         ## Show running processes
-        ps -f $( lsof -Pi :${DB_PORT} -sTCP:LISTEN -t )
+        ps -f $(lsof -Pi :${DB_PORT} -sTCP:LISTEN -t)
         echo ""
     else
         warn "No network service running"
@@ -231,8 +213,7 @@ status_db()
     fi
 }
 
-run_db()
-{
+run_db() {
     ## Is there a config file?
     if [ ! -e ${DB_CONF} ]; then
         ## No, so lets create one (first time run!)
@@ -246,8 +227,7 @@ run_db()
     msfconsole
 }
 
-usage()
-{
+usage() {
     PROG="$(basename $0)"
     echo
     echo "Manage the metasploit framework database"
@@ -273,13 +253,15 @@ if [ $(id -u) -ne 0 ]; then
 fi
 
 case $1 in
-    init) init_db ;;
-    reinit) reinit_db ;;
-    delete) delete_db ;;
-    start) start_db ;;
-    stop) stop_db ;;
-    status) status_db ;;
-    run) run_db ;;
-    *) err "unrecognized action '${RED}${1}${RESET}'"; usage ;;
+init) init_db ;;
+reinit) reinit_db ;;
+delete) delete_db ;;
+start) start_db ;;
+stop) stop_db ;;
+status) status_db ;;
+run) run_db ;;
+*)
+    err "unrecognized action '${RED}${1}${RESET}'"
+    usage
+    ;;
 esac
-
