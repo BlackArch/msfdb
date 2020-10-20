@@ -6,7 +6,7 @@ PG_BASEDIR=/var/lib/postgres
 DB_CONF=${METASPLOIT_BASEDIR}/config/database.yml
 DB_NAME=msf
 DB_USER=msf
-DB_PORT=5432
+DB_PORT="${2:-5432}"
 PG_SERVICE=postgresql
 PG_CONF=${PG_BASEDIR}/data/postgresql.conf
 METASPLOIT_PROFILE=/etc/profile.d/metasploit.sh
@@ -47,7 +47,7 @@ pw_gen() {
 }
 
 pg_cmd() {
-    su - postgres -c "$*"
+    su - postgres -c "$* -p $DB_PORT"
 }
 
 db_exists() {
@@ -232,6 +232,10 @@ usage() {
     echo
     echo "Manage the metasploit framework database"
     echo
+    echo "You can use an specific port number for the"
+    echo "postgresql connection after the operation."
+    echo "Example: ${PROG} init 5433"
+    echo
     echo "  ${PROG} init     # start and initialize the database"
     echo "  ${PROG} reinit   # delete and reinitialize the database"
     echo "  ${PROG} delete   # delete database and stop using it"
@@ -243,7 +247,7 @@ usage() {
     exit 0
 }
 
-if [ "$#" -ne 1 ]; then
+if [ "$#" -lt 1 ]; then
     usage
 fi
 
