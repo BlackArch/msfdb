@@ -13,6 +13,10 @@ $ msfdb
 
 Manage the metasploit framework database
 
+You can use an specific port number for the
+postgresql connection after the operation.
+Example: msfdb init 5433
+
   msfdb init     # start and initialize the database
   msfdb reinit   # delete and reinitialize the database
   msfdb delete   # delete database and stop using it
