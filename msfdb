@@ -51,14 +51,14 @@ pg_cmd() {
 }
 
 db_exists() {
-    if pg_cmd "psql -lqt" | cut -d \| -f 1 | grep -qw $1; then
+    if pg_cmd "psql -p ${DB_PORT} -lqt" | cut -d \| -f 1 | grep -qw $1; then
         return 0
     fi
     return 1
 }
 
 user_exists() {
-    if echo "SELECT usename FROM pg_user;" | pg_cmd "psql -qt postgres" | grep -qw $1; then
+    if echo "SELECT usename FROM pg_user;" | pg_cmd "psql -p ${DB_PORT} -qt postgres" | grep -qw $1; then
         return 0
     fi
     return 1
@@ -66,13 +66,14 @@ user_exists() {
 
 check_pg() {
     if [ -e ${PG_CONF} ]; then
-        return
+        sed -i "/^port/d" ${PG_CONF}
     else
         if [[ "$(stat -c "%U:%G" /var/lib/postgres/)" != "postgres:postgres" ]]; then
             chown -R postgres:postgres /var/lib/postgres/
         fi
         pg_cmd "initdb --locale en_US.UTF-8 -D '$PG_BASEDIR/data'" >/dev/null
     fi
+    pg_cmd "echo 'port = ${DB_PORT}' >> '${PG_CONF}'"
 }
 
 check_port() {
@@ -113,23 +114,23 @@ init_db() {
     DB_PASS=$(pw_gen)
     if user_exists ${DB_USER}; then
         msg "Resetting password of database user '${DB_USER}'"
-        printf "ALTER ROLE ${DB_USER} WITH PASSWORD '$DB_PASS';\n" | pg_cmd psql postgres >/dev/null
+        printf "ALTER ROLE ${DB_USER} WITH PASSWORD '$DB_PASS';\n" | pg_cmd psql -p ${DB_PORT} postgres >/dev/null
     else
         msg "Creating database user '${DB_USER}'"
         TMPFILE=$(mktemp) || (err "Couldn't create temp file" && exit 1)
-        printf "%s\n%s\n" "${DB_PASS}" "${DB_PASS}" | pg_cmd createuser -S -D -R -P ${DB_USER} >/dev/null 2>"${TMPFILE}"
+        printf "%s\n%s\n" "${DB_PASS}" "${DB_PASS}" | pg_cmd createuser -S -D -R -P ${DB_USER} -p ${DB_PORT} >/dev/null 2>"${TMPFILE}"
         grep -v "^Enter password for new role: $\|^Enter it again: $" "${TMPFILE}"
         rm -f "${TMPFILE}"
     fi
 
     if ! db_exists ${DB_NAME}; then
         msg "Creating databases '${DB_NAME}'"
-        pg_cmd createdb ${DB_NAME} -O ${DB_USER} -T template0 -E UTF-8
+        pg_cmd createdb ${DB_NAME} -O ${DB_USER} -T template0 -E UTF-8 -p ${DB_PORT}
     fi
 
     if ! db_exists ${DB_NAME}_test; then
         msg "Creating databases '${DB_NAME}_test'"
-        pg_cmd createdb ${DB_NAME}_test -O ${DB_USER} -T template0 -E UTF-8
+        pg_cmd createdb ${DB_NAME}_test -O ${DB_USER} -T template0 -E UTF-8 -p ${DB_PORT}
     fi
 
     msg "Creating configuration file '${DB_CONF}'"
@@ -175,18 +176,20 @@ delete_db() {
 
     if db_exists ${DB_NAME}; then
         msg "Dropping databases '${DB_NAME}'"
-        pg_cmd dropdb ${DB_NAME}
+        pg_cmd dropdb ${DB_NAME} -p ${DB_PORT}
     fi
 
     if db_exists ${DB_NAME}_test; then
         msg "Dropping databases '${DB_NAME}_test'"
-        pg_cmd dropdb ${DB_NAME}_test
+        pg_cmd dropdb ${DB_NAME}_test -p ${DB_PORT}
     fi
 
     if user_exists ${DB_USER}; then
         msg "Dropping database user '${DB_USER}'"
-        pg_cmd dropuser ${DB_USER}
+        pg_cmd dropuser ${DB_USER} -p ${DB_PORT}
     fi
+
+    sed -i "/^port/d" ${PG_CONF}
 
     msg "Deleting configuration file ${DB_CONF}"
     rm -f ${DB_CONF} ${METASPLOIT_PROFILE}
